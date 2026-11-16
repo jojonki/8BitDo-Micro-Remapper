@@ -1,0 +1,4 @@
+pygame-ce>=2.5
+pynput>=1.7.7
+# optional: only used to detect a Micro left in K (keyboard) mode
+hidapi>=0.14
