@@ -182,6 +182,24 @@ class GuiTest(unittest.TestCase):
         self.app.on_source_down("x:b9")
         self.assertEqual({b for b, s in self.app.pressed.items() if s}, {"r2"})
 
+    def test_key_picker_opens_on_current_key(self):
+        from remapper.keys import key_to_catalog_value
+        self.app.select_button("r")                   # default mapping: PageDown
+        cur = key_to_catalog_value("page_down")
+        self.assertEqual(self.app.key_var.get(), cur)
+        kp = self.app.key_cb
+        kp.open(); self.root.update()
+        sel = kp.lb.curselection()
+        self.assertEqual(kp.shown[sel[0]], cur)       # current key is selected
+        first, last = kp.lb.nearest(0), kp.lb.nearest(kp.lb.winfo_height())
+        self.assertTrue(first <= sel[0] <= last)      # ...and scrolled into view
+        kp.filter_var.set("f1")                       # typing filters the list
+        self.assertTrue(all("f1" in v.lower() for v in kp.shown))
+        kp._select(kp.shown.index(key_to_catalog_value("f12")))
+        kp._choose()
+        self.assertEqual(self.app.mappings["r"], {"type": "key", "keys": ["f12"]})
+        self.assertIsNone(kp.popup)
+
     def test_profile_persistence(self):
         from remapper import storage
         self.app.select_button("minus")

@@ -192,6 +192,111 @@ class Tooltip:
             self.tip = None
 
 
+class KeyPicker(tk.Frame):
+    """Dropdown field for picking a key. Unlike ttk.Combobox (whose popdown
+    can't be controlled reliably on macOS Tk 9), the list opens scrolled to
+    and selected on the current value, and typing filters it."""
+
+    def __init__(self, master, variable, values, command=None, font=None):
+        super().__init__(master, bg=C_CARD, highlightthickness=1,
+                         highlightbackground=C_BORDER, highlightcolor=C_ACCENT, cursor="hand2")
+        self.var, self.values, self.command, self.font = variable, list(values), command, font
+        self.popup = None
+        self.lbl = tk.Label(self, textvariable=variable, bg=C_CARD, fg=C_TEXT, font=font,
+                            anchor="w", padx=8, pady=4)
+        self.lbl.pack(side="left", fill="x", expand=True)
+        arrow = tk.Label(self, text="▾", bg=C_CARD, fg=C_MUTED, font=font, padx=8)
+        arrow.pack(side="right")
+        for w in (self, self.lbl, arrow):
+            w.bind("<Button-1>", lambda e: self.open())
+
+    # -- popup -------------------------------------------------------------
+    def open(self):
+        if self.popup:
+            self.close()
+            return
+        top = self.popup = tk.Toplevel(self, bg=C_BORDER)
+        top.wm_overrideredirect(True)
+        w = self.winfo_width()
+        x, y = self.winfo_rootx(), self.winfo_rooty() + self.winfo_height() + 2
+        top.wm_geometry(f"{w}x320+{x}+{y}")
+        inner = tk.Frame(top, bg=C_CARD)
+        inner.pack(fill="both", expand=True, padx=1, pady=1)
+        self.filter_var = tk.StringVar()
+        ent = tk.Entry(inner, textvariable=self.filter_var, bg=C_PANEL, fg=C_TEXT,
+                       insertbackground=C_TEXT, relief="flat", font=self.font,
+                       highlightthickness=0)
+        ent.pack(fill="x", padx=6, pady=6, ipady=3)
+        ent.insert(0, "")
+        frame = tk.Frame(inner, bg=C_CARD)
+        frame.pack(fill="both", expand=True)
+        sb = tk.Scrollbar(frame, orient="vertical")
+        self.lb = tk.Listbox(frame, bg=C_CARD, fg=C_TEXT, selectbackground=C_ACCENT,
+                             selectforeground="#ffffff", activestyle="none", relief="flat",
+                             highlightthickness=0, font=self.font, yscrollcommand=sb.set,
+                             exportselection=False)
+        sb.configure(command=self.lb.yview)
+        sb.pack(side="right", fill="y")
+        self.lb.pack(side="left", fill="both", expand=True)
+        self._fill("")
+        self.filter_var.trace_add("write", lambda *a: self._fill(self.filter_var.get()))
+        for wdg in (ent, self.lb):
+            wdg.bind("<Return>", lambda e: self._choose())
+            wdg.bind("<Escape>", lambda e: self.close())
+            wdg.bind("<Up>", lambda e: self._move(-1))
+            wdg.bind("<Down>", lambda e: self._move(1))
+        self.lb.bind("<ButtonRelease-1>", lambda e: self._choose())
+        top.bind("<FocusOut>", lambda e: self.after(80, self._close_if_unfocused))
+        ent.focus_set()
+
+    def _fill(self, query):
+        q = query.strip().lower()
+        self.shown = [v for v in self.values if q in v.lower()] if q else list(self.values)
+        self.lb.delete(0, "end")
+        for v in self.shown:
+            self.lb.insert("end", v)
+        # select + scroll to the current value (or the first match)
+        cur = self.var.get()
+        idx = self.shown.index(cur) if cur in self.shown else 0
+        if self.shown:
+            self._select(idx, center=True)
+
+    def _select(self, idx, center=False):
+        idx = max(0, min(idx, len(self.shown) - 1))
+        self.lb.selection_clear(0, "end")
+        self.lb.selection_set(idx)
+        self.lb.activate(idx)
+        if center:
+            # put the current item in the middle of the visible list
+            self.lb.update_idletasks()
+            first, last = self.lb.nearest(0), self.lb.nearest(self.lb.winfo_height())
+            visible = max(1, last - first)
+            self.lb.yview(max(0, idx - visible // 2))
+        self.lb.see(idx)
+
+    def _move(self, d):
+        sel = self.lb.curselection()
+        self._select((sel[0] if sel else 0) + d)
+        return "break"
+
+    def _choose(self):
+        sel = self.lb.curselection()
+        if sel:
+            self.var.set(self.shown[sel[0]])
+            if self.command:
+                self.command()
+        self.close()
+
+    def _close_if_unfocused(self):
+        if self.popup and not str(self.focus_get() or "").startswith(str(self.popup)):
+            self.close()
+
+    def close(self):
+        if self.popup:
+            self.popup.destroy()
+            self.popup = None
+
+
 # ======================================================================= app
 class RemapperApp:
     def __init__(self, root):
@@ -425,10 +530,9 @@ class RemapperApp:
             self.mod_buttons[m] = b
             v.trace_add("write", lambda *a, m=m: self.mod_buttons[m].set_active(self.mod_vars[m].get()))
         self.key_var = tk.StringVar(value="(none)")
-        self.key_cb = ttk.Combobox(kf, textvariable=self.key_var, values=catalog_display_values(),
-                                   state="readonly", height=20, font=self.f_small)
+        self.key_cb = KeyPicker(kf, self.key_var, catalog_display_values(),
+                                command=self._apply_key_form, font=self.f_small)
         self.key_cb.pack(fill="x", pady=(4, 0))
-        self.key_cb.bind("<<ComboboxSelected>>", lambda e: self._apply_key_form())
         self.forms_key = kf
 
         # --- mouse form ------------------------------------------------
