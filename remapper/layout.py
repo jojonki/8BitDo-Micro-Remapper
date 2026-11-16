@@ -86,7 +86,8 @@ BUTTONS = [
     # (star: never reported over USB, home: power + OS shortcut), so they are
     # shown but cannot be assigned.
     {"id": "star", "label": "", "name": "Centre left (disabled)", "shape": "circle",
-     "box": _circle(440, 300, 12), "chip": ("left", 7), "disabled": True},
+     "box": _circle(440, 300, 12), "chip": ("left", 7), "disabled": True,
+     "no_chip": True},             # nothing to show or set -> just the button
     {"id": "home", "label": "", "name": "Centre right / Home (disabled)", "shape": "circle",
      "box": _circle(480, 300, 12), "chip": ("right", 7), "disabled": True},
 ]
@@ -135,12 +136,14 @@ DEFAULT_SOURCE_MAP = {
     "h0:up": "up", "h0:down": "down", "h0:left": "left", "h0:right": "right",
     "a0:-": "left", "a0:+": "right", "a1:-": "up", "a1:+": "down",
     # Exclusive HID mode (macOS, see hid_exclusive.py): standard 8BitDo
-    # D-input bit order. Use "Learn all" if a button lights up wrong.
+    # D-input bit order. Use "Fix all" if a button lights up wrong.
     "x:hat:up": "up", "x:hat:down": "down", "x:hat:left": "left", "x:hat:right": "right",
     "x:b0": "a", "x:b1": "b", "x:b3": "x", "x:b4": "y",
     "x:b6": "l", "x:b7": "r", "x:b8": "l2", "x:b9": "r2",
     "x:b10": "minus", "x:b11": "plus", "x:b12": "home",
-    "x:brake": "l2", "x:accel": "r2",
+    # x:brake / x:accel are NOT mapped: on the Micro a trigger press sends the
+    # analog value together with a button bit (verified on hardware), so
+    # mapping both made one press light up two buttons.
     # Left stick of the controller API (some modes report the D-pad as a stick)
     "c:leftx:-": "left", "c:leftx:+": "right", "c:lefty:-": "up", "c:lefty:+": "down",
 }

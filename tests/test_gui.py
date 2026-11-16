@@ -1,5 +1,6 @@
 """Drives the real Tk GUI (window is created then destroyed)."""
 import os
+import sys
 import tempfile
 import unittest
 
@@ -125,6 +126,7 @@ class GuiTest(unittest.TestCase):
         self.app.start_wizard()
         self.assertEqual(self.app.learn_target, "up")
         self.app.on_source_down("b:7")
+        self.app._finish_learn()      # normally fired 150 ms later
         self.assertEqual(self.app.settings["source_map"]["b:7"], "up")
         self.assertEqual(self.app.learn_target, "down")
         self.app.stop_learning()
@@ -139,7 +141,9 @@ class GuiTest(unittest.TestCase):
         self.app.on_source_down("x:b12")
         self.assertFalse(self.app.pressed.get("home"))
         self.assertEqual(self.app.executor.calls, [])
-        self.assertEqual(self.app.canvas.itemcget(self.app.items["star"]["map"], "text"), "Disabled")
+        self.assertNotIn("map", self.app.items["star"])        # star: button only, no label
+        self.assertEqual(self.app.canvas.itemcget(self.app.items["home"]["map"], "text")
+                         if sys.platform != "darwin" else "Disabled", "Disabled")
 
     def test_home_menu_setting(self):
         import sys
@@ -149,14 +153,34 @@ class GuiTest(unittest.TestCase):
         self.app.exclusive_var.set(True)
         self.app.settings["exclusive"] = True
         self.app._update_home_chip()
-        self.assertEqual(txt(), "Games app blocked")
+        self.assertEqual(txt(), "Games app: blocked")
         self.app.exclusive_var.set(False)
         self.app.on_toggle_exclusive()
         self.assertFalse(self.app.settings["exclusive"])
-        self.assertEqual(txt(), "Opens Games app")
+        self.assertEqual(txt(), "Games app: allowed")
         self.app.exclusive_var.set(True)
         self.app.on_toggle_exclusive()
         self.assertTrue(self.app.settings["exclusive"])
+
+    def test_learning_binds_simultaneous_inputs(self):
+        self.app.learn_selected_target = None
+        self.app.selected = "r2"
+        self.app.learn_selected()
+        self.app.on_source_down("x:b9")
+        self.app.on_source_down("x:brake")     # same physical press
+        self.app._finish_learn()
+        smap = self.app.settings["source_map"]
+        self.assertEqual((smap["x:b9"], smap["x:brake"]), ("r2", "r2"))
+        self.app.on_source_down("x:b9")
+        self.app.on_source_down("x:brake")
+        self.assertEqual(set(self.app.pressed), {"r2"})   # one button, not two
+        self.app.settings["source_map"] = {}
+
+    def test_trigger_press_lights_one_button(self):
+        # hardware: a trigger sends brake + a button bit together
+        self.app.on_source_down("x:brake")
+        self.app.on_source_down("x:b9")
+        self.assertEqual({b for b, s in self.app.pressed.items() if s}, {"r2"})
 
     def test_profile_persistence(self):
         from remapper import storage

@@ -46,15 +46,18 @@ C_SELECT = C_ACCENT
 C_LEARN = C_PINK
 C_LINE = "#5c6578"      # idle leader line: visible on both bg and body
 
-HINT_DEFAULT = "Click a button or label to select it, then assign it on the right. Buttons light up when pressed."
+LEARN_LINK = "Wrong button lights up? Fix…"
+HINT_DEFAULT = ""   # the canvas only shows prompts while capturing / fixing
 MOD_KEY = "Command" if sys.platform == "darwin" else "Ctrl"
 
 
 def pick_font_family(root):
     prefs = {
-        "darwin": ["Hiragino Sans", "Hiragino Kaku Gothic ProN", "Helvetica Neue"],
-        "win32": ["Yu Gothic UI", "Meiryo UI", "Segoe UI"],
-    }.get(sys.platform, ["Noto Sans CJK JP", "Noto Sans JP", "DejaVu Sans"])
+        # UI text is English: Latin UI fonts have even vertical metrics, so
+        # text lines up with switches / inputs (CJK fonts sit noticeably off)
+        "darwin": ["Helvetica Neue", "Helvetica"],
+        "win32": ["Segoe UI", "Tahoma"],
+    }.get(sys.platform, ["DejaVu Sans", "Liberation Sans"])
     try:
         fams = set(tkfont.families(root))
     except Exception:
@@ -136,7 +139,7 @@ class Toggle(tk.Frame):
         self.var = variable
         self.command = command
         self.cv = tk.Canvas(self, width=38, height=22, bg=bg, highlightthickness=0, cursor="hand2")
-        self.cv.pack(side="left")
+        self.cv.pack(side="left", pady=(2, 0))   # optical centre of the label text
         lbl = tk.Label(self, text=text, bg=bg, fg=C_TEXT, font=font, cursor="hand2")
         lbl.pack(side="left", padx=(6, 0))
         for w in (self.cv, lbl):
@@ -212,6 +215,7 @@ class RemapperApp:
         self.device_name = None
         self.unknown_sources = set()
         self._suppress_form = False
+        self._learn_pending = None
 
         self.ff = pick_font_family(root)
         self.f_body = (self.ff, 12)
@@ -268,28 +272,31 @@ class RemapperApp:
         root = self.root
         root.title(f"{APP_NAME} v{__version__}")
         root.configure(bg=C_BG)
-        root.minsize(1330, 660)
+        root.minsize(1280, 600)
         self._style()
 
         # ---- toolbar -------------------------------------------------
         bar = tk.Frame(root, bg=C_BG, padx=20, pady=14)
         bar.pack(side="top", fill="x")
+        # baselines in this bar are aligned to the input text (measured);
+        # the larger title is lifted a few px so it sits on the same line
         tk.Label(bar, text="8BitDo Micro", bg=C_BG, fg=C_TEXT,
-                 font=(self.ff, 17, "bold")).pack(side="left")
+                 font=(self.ff, 17, "bold")).pack(side="left", pady=(0, 6))
         tk.Label(bar, text=" Remapper", bg=C_BG, fg=C_ACCENT,
-                 font=(self.ff, 17, "bold")).pack(side="left")
+                 font=(self.ff, 17, "bold")).pack(side="left", pady=(0, 6))
 
         pf = tk.Frame(bar, bg=C_BG)
         pf.pack(side="left", padx=(36, 0))
-        tk.Label(pf, text="Profile", bg=C_BG, fg=C_MUTED, font=self.f_small).pack(side="left", padx=(0, 8))
+        tk.Label(pf, text="Profile", bg=C_BG, fg=C_MUTED, font=self.f_body).pack(
+            side="left", padx=(0, 8), pady=(1, 0))
         self.profile_var = tk.StringVar(value=self.profile_name)
         self.profile_cb = ttk.Combobox(pf, textvariable=self.profile_var, values=self.profiles,
                                        state="readonly", width=18, font=self.f_body)
         self.profile_cb.pack(side="left")
         self.profile_cb.bind("<<ComboboxSelected>>",
                              lambda e: self.switch_profile(self.profile_var.get()))
-        FlatButton(pf, "＋ New", self.new_profile, font=self.f_small).pack(side="left", padx=(8, 0))
-        self.menu_btn = FlatButton(pf, "⋯", self._open_profile_menu, font=self.f_bold, padx=12)
+        FlatButton(pf, "＋ New", self.new_profile, font=self.f_body).pack(side="left", padx=(8, 0))
+        self.menu_btn = FlatButton(pf, "⋯", self._open_profile_menu, font=self.f_body, padx=12)
         self.menu_btn.pack(side="left", padx=(6, 0))
         self.profile_menu = tk.Menu(root, tearoff=0)
         self.profile_menu.add_command(label="Duplicate…", command=self.duplicate_profile)
@@ -343,7 +350,7 @@ class RemapperApp:
         main.pack(side="top", fill="both", expand=True)
         self.main_frame = main
 
-        right = tk.Frame(main, bg=C_PANEL, width=380, padx=22, pady=20)
+        right = tk.Frame(main, bg=C_PANEL, width=340, padx=14, pady=12)
         right.pack(side="right", fill="y")
         right.pack_propagate(False)
         self._build_editor(right)
@@ -365,45 +372,42 @@ class RemapperApp:
         root.bind_all("<KeyPress>", self._on_key_press, add="+")
         root.bind_all("<KeyRelease>", self._on_key_release, add="+")
 
-    def _section(self, parent, text, pady=(22, 8)):
+    def _section(self, parent, text, pady=(12, 4)):
         tk.Label(parent, text=text, bg=C_PANEL, fg=C_DIM, font=self.f_section,
                  anchor="w").pack(fill="x", pady=pady)
 
     def _build_editor(self, parent):
         self.sel_title = tk.StringVar(value="")
         self.sel_current = tk.StringVar(value="")
-        tk.Label(parent, text="SELECTED BUTTON", bg=C_PANEL, fg=C_DIM, font=self.f_section,
-                 anchor="w").pack(fill="x")
-        tk.Label(parent, textvariable=self.sel_title, bg=C_PANEL, fg=C_TEXT,
-                 font=self.f_title, anchor="w").pack(fill="x", pady=(2, 0))
-        tk.Label(parent, textvariable=self.sel_current, bg=C_PANEL, fg=C_ACCENT,
-                 font=self.f_current, anchor="w").pack(fill="x", pady=(2, 0))
+        # one compact header row:  <button>   → <current mapping>
+        head = tk.Frame(parent, bg=C_PANEL)
+        head.pack(fill="x")
+        tk.Label(head, textvariable=self.sel_title, bg=C_PANEL, fg=C_TEXT,
+                 font=self.f_current, anchor="w").pack(side="left")
+        tk.Label(head, text="→", bg=C_PANEL, fg=C_DIM, font=self.f_body).pack(side="left", padx=6)
+        tk.Label(head, textvariable=self.sel_current, bg=C_PANEL, fg=C_ACCENT,
+                 font=self.f_bold, anchor="w").pack(side="left", fill="x", expand=True)
 
         # segmented control for the action type
-        self._section(parent, "ACTION")
-        seg = tk.Frame(parent, bg=C_CARD, padx=3, pady=3)
-        seg.pack(fill="x")
+        seg = tk.Frame(parent, bg=C_CARD, padx=2, pady=2)
+        seg.pack(fill="x", pady=(10, 0))
         self.type_var = tk.StringVar(value="key")
         self.seg_buttons = {}
         for val, lbl in ACTION_TYPES:
             b = FlatButton(seg, lbl, lambda v=val: self._select_type(v), kind="secondary",
-                           font=self.f_small, padx=4, pady=6)
+                           font=self.f_small, padx=2, pady=3)
             b.pack(side="left", fill="x", expand=True, padx=1)
             self.seg_buttons[val] = b
 
         self.forms = tk.Frame(parent, bg=C_PANEL)
-        self.forms.pack(fill="x", pady=(14, 0))
+        self.forms.pack(fill="x", pady=(10, 0))
 
         # --- key form ---------------------------------------------------
         kf = tk.Frame(self.forms, bg=C_PANEL)
         self.capture_btn = FlatButton(kf, "⌨  Press a key to assign", self.toggle_capture,
-                                      kind="primary", font=self.f_bold, pady=11)
+                                      kind="primary", font=self.f_small, pady=5)
         self.capture_btn.pack(fill="x")
-        tk.Label(kf, text="The next key you press is recorded (combos like Ctrl+C work too).",
-                 bg=C_PANEL, fg=C_MUTED, font=self.f_small, anchor="w",
-                 wraplength=330, justify="left").pack(fill="x", pady=(6, 0))
-
-        self._section(kf, "OR PICK FROM THE LIST", pady=(18, 8))
+        self._section(kf, "OR PICK", pady=(8, 3))
         modrow = tk.Frame(kf, bg=C_PANEL)
         modrow.pack(fill="x")
         self.mod_vars = {}
@@ -412,15 +416,14 @@ class RemapperApp:
             v = tk.BooleanVar(value=False)
             self.mod_vars[m] = v
             b = FlatButton(modrow, MODIFIER_LABELS[m], lambda m=m: self._toggle_mod(m),
-                           font=self.f_small, padx=6, pady=5)
-            b.pack(side="left", fill="x", expand=True, padx=(0, 4))
+                           font=self.f_small, padx=2, pady=2)
+            b.pack(side="left", fill="x", expand=True, padx=(0, 3))
             self.mod_buttons[m] = b
             v.trace_add("write", lambda *a, m=m: self.mod_buttons[m].set_active(self.mod_vars[m].get()))
-        tk.Label(kf, text="＋", bg=C_PANEL, fg=C_DIM, font=self.f_body).pack(pady=2)
         self.key_var = tk.StringVar(value="(none)")
         self.key_cb = ttk.Combobox(kf, textvariable=self.key_var, values=catalog_display_values(),
-                                   state="readonly", height=20, font=self.f_body)
-        self.key_cb.pack(fill="x")
+                                   state="readonly", height=20, font=self.f_small)
+        self.key_cb.pack(fill="x", pady=(4, 0))
         self.key_cb.bind("<<ComboboxSelected>>", lambda e: self._apply_key_form())
         self.forms_key = kf
 
@@ -428,24 +431,23 @@ class RemapperApp:
         mfm = tk.Frame(self.forms, bg=C_PANEL)
         self.mouse_var = tk.StringVar()
         self.mouse_cb = ttk.Combobox(mfm, textvariable=self.mouse_var, state="readonly",
-                                     values=[lbl for _, lbl in MOUSE_ACTIONS], font=self.f_body)
+                                     values=[lbl for _, lbl in MOUSE_ACTIONS], font=self.f_small)
         self.mouse_cb.pack(fill="x")
         self.mouse_cb.bind("<<ComboboxSelected>>", lambda e: self._apply_mouse_form())
-        tk.Label(mfm, text="Hold to accelerate cursor movement or keep scrolling.",
-                 bg=C_PANEL, fg=C_MUTED, font=self.f_small, wraplength=330,
-                 justify="left", anchor="w").pack(fill="x", pady=(8, 0))
+        tk.Label(mfm, text="Hold to accelerate / keep scrolling.", bg=C_PANEL, fg=C_MUTED,
+                 font=self.f_small, anchor="w").pack(fill="x", pady=(4, 0))
         self.forms_mouse = mfm
 
         # --- text form -------------------------------------------------
         txf = tk.Frame(self.forms, bg=C_PANEL)
-        tk.Label(txf, text="Text typed when the button is pressed", bg=C_PANEL, fg=C_MUTED,
-                 font=self.f_small, anchor="w").pack(fill="x", pady=(0, 6))
         self.text_var = tk.StringVar()
-        ent = ttk.Entry(txf, textvariable=self.text_var, font=self.f_body)
-        ent.pack(fill="x")
+        trow = tk.Frame(txf, bg=C_PANEL)
+        trow.pack(fill="x")
+        ent = ttk.Entry(trow, textvariable=self.text_var, font=self.f_small)
+        ent.pack(side="left", fill="x", expand=True)
         ent.bind("<Return>", lambda e: self._apply_text_form())
-        FlatButton(txf, "Apply", self._apply_text_form, kind="primary",
-                   font=self.f_small).pack(anchor="e", pady=(8, 0))
+        FlatButton(trow, "Apply", self._apply_text_form, kind="primary",
+                   font=self.f_small, padx=10, pady=3).pack(side="left", padx=(4, 0))
         self.forms_text = txf
 
         # --- none form -------------------------------------------------
@@ -455,31 +457,18 @@ class RemapperApp:
         self.forms_none = nf
 
         act = tk.Frame(parent, bg=C_PANEL)
-        act.pack(fill="x", pady=(16, 0))
-        FlatButton(act, "Reset to default", self.reset_selected, kind="secondary",
-                   font=self.f_small).pack(side="left")
-        FlatButton(act, "Clear", self.clear_selected, kind="danger",
-                   font=self.f_small).pack(side="left", padx=(8, 0))
+        act.pack(fill="x", pady=(8, 0))
+        FlatButton(act, "Reset to default", self.reset_selected, kind="ghost",
+                   font=self.f_small, padx=0, pady=2).pack(side="left")
+        FlatButton(act, "Clear", self.clear_selected, kind="ghost",
+                   font=self.f_small, padx=0, pady=2).pack(side="left", padx=(14, 0))
 
-        # --- learn (bottom) ------------------------------------------------
+        # --- button fixing (bottom, deliberately low-key) --------------------
         lf = tk.Frame(parent, bg=C_PANEL)
         lf.pack(side="bottom", fill="x")
-        tk.Frame(lf, bg=C_BORDER, height=1).pack(fill="x", pady=(0, 12))
-        tk.Label(lf, text="BUTTON LEARNING", bg=C_PANEL, fg=C_DIM, font=self.f_section,
-                 anchor="w").pack(fill="x")
-        tk.Label(lf, text="Use this if the wrong button lights up, or none does.",
-                 bg=C_PANEL, fg=C_MUTED, font=self.f_small, anchor="w",
-                 wraplength=330, justify="left").pack(fill="x", pady=(4, 8))
-        row = tk.Frame(lf, bg=C_PANEL)
-        row.pack(fill="x")
-        self.learn_btn = FlatButton(row, "Learn selected", self.learn_selected,
-                                    font=self.f_small, padx=8)
-        self.learn_btn.pack(side="left", fill="x", expand=True)
-        self.wizard_btn = FlatButton(row, "Learn all", self.start_wizard,
-                                     font=self.f_small, padx=8)
-        self.wizard_btn.pack(side="left", fill="x", expand=True, padx=(6, 0))
-        FlatButton(lf, "Reset learned buttons", self.reset_learning, kind="ghost",
-                   font=self.f_small, padx=0).pack(anchor="w", pady=(6, 0))
+        self.learn_btn = FlatButton(lf, LEARN_LINK, self.open_fix_dialog, kind="ghost",
+                                    font=self.f_small, padx=0, pady=2)
+        self.learn_btn.pack(anchor="w")
 
     def _open_profile_menu(self):
         x = self.menu_btn.winfo_rootx()
@@ -570,33 +559,44 @@ class RemapperApp:
         c = self.canvas
         bid = b["id"]
         shape = c.create_oval(*b["box"], fill="#30353f", outline=C_DIM, width=1, dash=(2, 2))
+        if b.get("no_chip"):
+            c.delete(self.items[bid]["line"])
+            self.items[bid] = {"shape": shape}
+            return
         x1, y1, x2, y2 = chip_box(b)
+        cy = (y1 + y2) / 2
+        if bid == "home" and sys.platform == "darwin":
+            # Home can't be remapped, but it has a setting: a solid, clickable
+            # chip showing the Games-app state; click opens the Home menu.
+            chip = c.create_polygon(rounded_points(x1, y1, x2, y2, 9), smooth=True,
+                                    fill=C_CARD, outline=C_BORDER, width=1)
+            maptxt = c.create_text(x1 + 12, cy, text="", anchor="w", font=(self.ff, 11))
+            gear = c.create_text(x2 - 13, cy, text="⚙", fill=C_MUTED, font=(self.ff, 13))
+            self.items[bid].update({"shape": shape, "chip": chip, "map": maptxt})
+            c.itemconfigure(self.items[bid]["line"], dash=(2, 3))
+            for item in (shape, chip, maptxt, gear):
+                c.tag_bind(item, "<Button-1>", self._open_home_menu)
+                c.tag_bind(item, "<Enter>", lambda e: (self.canvas.configure(cursor="hand2"),
+                                                        self.canvas.itemconfigure(chip, fill=C_CARD_HOVER)))
+                c.tag_bind(item, "<Leave>", lambda e: (self.canvas.configure(cursor=""),
+                                                        self.canvas.itemconfigure(chip, fill=C_CARD)))
+            self._update_home_chip()
+            return
         chip = c.create_polygon(rounded_points(x1, y1, x2, y2, 9), smooth=True,
                                 fill=C_BG, outline=C_BORDER, width=1, dash=(3, 3))
-        badge = c.create_polygon(rounded_points(x1 + 6, y1 + 5, x1 + 40, y2 - 5, 6),
-                                 smooth=True, fill="", outline=C_DIM, dash=(2, 2))
-        maptxt = c.create_text(x1 + 50, (y1 + y2) / 2, text="Disabled", anchor="w",
-                               fill=C_DIM, font=(self.ff, 12))
-        self.items[bid].update({"shape": shape, "chip": chip, "badge": badge, "map": maptxt})
+        maptxt = c.create_text(x1 + 12, cy, text="Disabled", anchor="w",
+                               fill=C_DIM, font=(self.ff, 11))
+        self.items[bid].update({"shape": shape, "chip": chip, "map": maptxt})
         c.itemconfigure(self.items[bid]["line"], dash=(2, 3))
-        if bid == "home" and sys.platform == "darwin":
-            # Home can't be remapped, but it has a setting: open its menu on click
-            gear = c.create_text(x2 - 14, (y1 + y2) / 2, text="⚙", fill=C_MUTED,
-                                 font=(self.ff, 13))
-            for item in (shape, chip, badge, maptxt, gear):
-                c.tag_bind(item, "<Button-1>", self._open_home_menu)
-                c.tag_bind(item, "<Enter>", lambda e: self.canvas.configure(cursor="hand2"))
-                c.tag_bind(item, "<Leave>", lambda e: self.canvas.configure(cursor=""))
-            self._update_home_chip()
 
     def _update_home_chip(self):
         it = self.items.get("home")
         if not it or sys.platform != "darwin":
             return
         if self.exclusive_var.get():
-            self.canvas.itemconfigure(it["map"], text="Games app blocked", fill=C_MUTED)
+            self.canvas.itemconfigure(it["map"], text="Games app: blocked", fill=C_GREEN)
         else:
-            self.canvas.itemconfigure(it["map"], text="Opens Games app", fill=C_ORANGE)
+            self.canvas.itemconfigure(it["map"], text="Games app: allowed", fill=C_ORANGE)
 
     def _open_home_menu(self, e):
         try:
@@ -796,7 +796,7 @@ class RemapperApp:
         self.capture_deadline = time.monotonic() + 15
         self.type_var.set("key")
         self._show_form("key")
-        self.capture_btn.configure(text="…Press a key (click to cancel)")
+        self.capture_btn.configure(text="…Press a key  (click to cancel)")
         self.capture_btn.set_kind("learn")
         self.hint_var.set(f"Press the key to assign to {BUTTON_BY_ID[self.selected]['name']}")
         self.hint_lbl.configure(fg=C_PINK)
@@ -842,6 +842,46 @@ class RemapperApp:
         return "break"
 
     # ----------------------------------------------------------- learning
+    def open_fix_dialog(self):
+        """Explain how fixing works, then let the user start it."""
+        d = tk.Toplevel(self.root, bg=C_PANEL, padx=22, pady=18)
+        d.title("Fix button detection")
+        d.transient(self.root)
+        d.resizable(False, False)
+        tk.Label(d, text="Fix button detection", bg=C_PANEL, fg=C_TEXT,
+                 font=self.f_current, anchor="w").pack(fill="x")
+        steps = (
+            "Use this only if pressing a button on the Micro lights up a different "
+            "button on screen (or none).\n\n"
+            "1.  Click “Start”.\n"
+            "2.  The button to press is outlined in pink, and named under the controller.\n"
+            "3.  Press that button on the Micro. The next one is highlighted automatically.\n"
+            "4.  Repeat until all buttons are done (or click “■ Stop fixing”).\n\n"
+            "This re-learns which physical button is which. "
+            "Your key assignments are kept.")
+        tk.Label(d, text=steps, bg=C_PANEL, fg=C_MUTED, font=self.f_small, justify="left",
+                 wraplength=420, anchor="w").pack(fill="x", pady=(8, 14))
+        row = tk.Frame(d, bg=C_PANEL)
+        row.pack(fill="x")
+
+        def go(fn):
+            d.destroy()
+            fn()
+        FlatButton(row, "Start (all buttons)", lambda: go(self.start_wizard), kind="primary",
+                   font=self.f_small).pack(side="left")
+        if self.selected:
+            FlatButton(row, f"Only {BUTTON_BY_ID[self.selected]['name']}",
+                       lambda: go(self.learn_selected), font=self.f_small).pack(side="left", padx=(6, 0))
+        FlatButton(row, "Cancel", d.destroy, kind="ghost", font=self.f_small).pack(side="right")
+        FlatButton(d, "Undo all fixes (back to defaults)", lambda: go(self.reset_learning),
+                   kind="ghost", font=self.f_small, padx=0).pack(anchor="w", pady=(10, 0))
+        d.bind("<Escape>", lambda e: d.destroy())
+        d.update_idletasks()
+        x = self.root.winfo_rootx() + (self.root.winfo_width() - d.winfo_width()) // 2
+        y = self.root.winfo_rooty() + (self.root.winfo_height() - d.winfo_height()) // 3
+        d.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        d.grab_set()
+
     def learn_selected(self):
         if not self.selected:
             return
@@ -863,9 +903,10 @@ class RemapperApp:
         rest = f"({len(self.wizard)} more)" if self.wizard else ""
         self.hint_var.set(f"Press {BUTTON_BY_ID[bid]['name']} on the controller {rest}")
         self.hint_lbl.configure(fg=C_PINK)
-        self.learn_btn.configure(text="Stop learning")
+        self.learn_btn.configure(text="■ Stop fixing")
         self.learn_btn.command = self.stop_learning
         self.learn_btn.set_kind("learn")
+        self.learn_btn.configure(padx=8)
         self.refresh_visuals()
 
     def stop_learning(self):
@@ -873,22 +914,30 @@ class RemapperApp:
             return
         self.learn_target = None
         self.wizard = []
-        self.learn_btn.configure(text="Learn selected")
-        self.learn_btn.command = self.learn_selected
-        self.learn_btn.set_kind("secondary")
+        self.learn_btn.configure(text=LEARN_LINK, padx=0)
+        self.learn_btn.command = self.open_fix_dialog
+        self.learn_btn.set_kind("ghost")
         self.hint_var.set(HINT_DEFAULT)
         self.hint_lbl.configure(fg=C_MUTED)
         self.refresh_visuals()
 
-    def _learned(self, source):
+    def _finish_learn(self):
+        sources, self._learn_pending = self._learn_pending, None
+        if sources and self.learn_target is not None:
+            self._learned(sources)
+
+    def _learned(self, sources):
+        if isinstance(sources, str):
+            sources = [sources]
         target = self.learn_target
         smap = self.settings["source_map"]
         for s in [s for s, t in smap.items() if t == target]:
             del smap[s]
-        smap[source] = target
-        self.unknown_sources.discard(source)
+        for src in sources:
+            smap[src] = target
+            self.unknown_sources.discard(src)
         storage.save_settings(self.settings)
-        self.log(f"Learned: {source} → {BUTTON_BY_ID[target]['name']}")
+        self.log(f"Learned: {' + '.join(sources)} → {BUTTON_BY_ID[target]['name']}")
         if self.wizard:
             self._begin_learn(self.wizard.pop(0))
         else:
@@ -910,13 +959,21 @@ class RemapperApp:
     # ------------------------------------------------------- input events
     def on_source_down(self, source):
         if self.learn_target is not None:
-            self._learned(source)
+            # one physical press can emit several inputs at once (e.g. a
+            # trigger sends an analog value *and* a button bit): collect them
+            # for a moment and bind them all to the target button
+            if self._learn_pending is None:
+                self._learn_pending = [source]
+                self.root.after(150, self._finish_learn)
+            elif source not in self._learn_pending:
+                self._learn_pending.append(source)
             return
         bid = self.resolve(source)
+        self.log(f"Input {source} → {BUTTON_BY_ID[bid]['name'] if bid else '?'}")
         if bid is None:
             if source not in self.unknown_sources:
                 self.unknown_sources.add(source)
-                self.log(f"Unknown input {source} — use Button Learning to bind it")
+                self.log(f"Unknown input {source} — use “{LEARN_LINK}” to bind it")
             return
         if bid in DISABLED_IDS:
             return  # e.g. Home: shown but never remapped
