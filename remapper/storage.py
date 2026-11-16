@@ -68,7 +68,7 @@ def load_settings():
     s.setdefault("enabled", True)
     s.setdefault("force_raw", False)
     # macOS: seize the pad so the Home button can't launch the Games app
-    s.setdefault("exclusive", sys.platform == "darwin")
+    s.setdefault("exclusive", False)  # use macOS Settings > Game Controllers > Home Button instead
     if not isinstance(s["source_map"], dict):
         s["source_map"] = {}
     return s

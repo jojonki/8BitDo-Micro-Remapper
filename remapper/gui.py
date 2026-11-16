@@ -46,6 +46,9 @@ C_SELECT = C_ACCENT
 C_LEARN = C_PINK
 C_LINE = "#5c6578"      # idle leader line: visible on both bg and body
 
+import os as _os
+# set MICRO_REMAPPER_LOG=/path/file.log to record every controller event
+DEBUG_LOG = _os.environ.get("MICRO_REMAPPER_LOG")
 LEARN_LINK = "Wrong button lights up? Fix…"
 HINT_DEFAULT = ""   # the canvas only shows prompts while capturing / fixing
 MOD_KEY = "Command" if sys.platform == "darwin" else "Ctrl"
@@ -312,20 +315,21 @@ class RemapperApp:
         Toggle(bar, "Key repeat", self.repeat_var, self.on_toggle_repeat,
                font=self.f_body).pack(side="right", padx=(0, 22))
         self.exclusive_var = tk.BooleanVar(value=self.settings["exclusive"])
-        # Home-button menu (opened by clicking the Home button / its label)
+        # Home-button menu (opened by clicking the Home button / its label).
+        # macOS itself can stop Home from opening the Games app (System
+        # Settings > Game Controllers > Home Button > "Enable Home Button
+        # Actions"); that keeps the D-pad working. Exclusive mode is only a
+        # fallback: it also blocks Home but the pad then sends no D-pad data.
         self.home_menu = tk.Menu(root, tearoff=0)
         self.home_menu.add_command(label="Home button", state="disabled")
         self.home_menu.add_separator()
-        self.home_menu.add_radiobutton(
-            label="Block — don't open the Games app (default)", variable=self.exclusive_var,
-            value=True, command=self.on_toggle_exclusive)
-        self.home_menu.add_radiobutton(
-            label="Allow — macOS opens the Games app", variable=self.exclusive_var,
-            value=False, command=self.on_toggle_exclusive)
-        self.home_menu.add_separator()
         self.home_menu.add_command(
-            label="Block takes exclusive control: other games can't use the Micro meanwhile.",
-            state="disabled")
+            label="Open Game Controller settings…  (turn off “Enable Home Button Actions”)",
+            command=self.open_gc_settings)
+        self.home_menu.add_separator()
+        self.home_menu.add_checkbutton(
+            label="Exclusive mode — block Home in this app (D-pad won't work)",
+            variable=self.exclusive_var, command=self.on_toggle_exclusive)
 
         # ---- status bar ----------------------------------------------
         status = tk.Frame(root, bg=C_PANEL, padx=20, pady=8)
@@ -594,9 +598,9 @@ class RemapperApp:
         if not it or sys.platform != "darwin":
             return
         if self.exclusive_var.get():
-            self.canvas.itemconfigure(it["map"], text="Games app: blocked", fill=C_GREEN)
+            self.canvas.itemconfigure(it["map"], text="Exclusive mode", fill=C_ORANGE)
         else:
-            self.canvas.itemconfigure(it["map"], text="Games app: allowed", fill=C_ORANGE)
+            self.canvas.itemconfigure(it["map"], text="Home: macOS setting", fill=C_MUTED)
 
     def _open_home_menu(self, e):
         try:
@@ -1031,6 +1035,12 @@ class RemapperApp:
         self.dot.itemconfigure(self._dot, fill=color)
 
     def _handle_msg(self, msg):
+        if DEBUG_LOG:
+            try:
+                with open(DEBUG_LOG, "a", encoding="utf-8") as f:
+                    f.write(f"{time.time():.3f} {msg!r} learn={self.learn_target}\n")
+            except OSError:
+                pass
         kind = msg[0]
         if kind == "down":
             self.on_source_down(msg[1])
@@ -1157,6 +1167,10 @@ class RemapperApp:
         storage.save_settings(self.settings)
         self.log("Remap " + ("on" if self.settings["enabled"] else "off"))
 
+    def open_gc_settings(self):
+        import subprocess
+        subprocess.Popen(["open", "x-apple.systempreferences:com.apple.Game-Controller-Settings.extension"])
+
     def on_toggle_exclusive(self):
         self._update_home_chip()
         if bool(self.settings.get("exclusive")) == self.exclusive_var.get():
@@ -1164,9 +1178,8 @@ class RemapperApp:
         self.settings["exclusive"] = self.exclusive_var.get()
         storage.save_settings(self.settings)
         self.restart_worker()
-        self.log("Exclusive mode " + ("on — Home no longer opens the Games app; other apps "
-                                      "can't see the pad while this runs" if self.settings["exclusive"]
-                                      else "off"))
+        self.log("Exclusive mode " + ("on — Home blocked, but the D-pad won't work"
+                                      if self.settings["exclusive"] else "off"))
 
     def restart_worker(self):
         self.executor.release_all()

@@ -153,11 +153,11 @@ class GuiTest(unittest.TestCase):
         self.app.exclusive_var.set(True)
         self.app.settings["exclusive"] = True
         self.app._update_home_chip()
-        self.assertEqual(txt(), "Games app: blocked")
+        self.assertEqual(txt(), "Exclusive mode")
         self.app.exclusive_var.set(False)
         self.app.on_toggle_exclusive()
         self.assertFalse(self.app.settings["exclusive"])
-        self.assertEqual(txt(), "Games app: allowed")
+        self.assertEqual(txt(), "Home: macOS setting")
         self.app.exclusive_var.set(True)
         self.app.on_toggle_exclusive()
         self.assertTrue(self.app.settings["exclusive"])
