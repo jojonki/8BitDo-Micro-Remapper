@@ -1,131 +1,148 @@
 # 8BitDo Micro Remapper
 
-USB 接続した **8BitDo Micro** のボタンを、キーボードやマウスの入力に割り当てるデスクトップアプリです。
-**Windows と macOS** で同じように使えます。
+![8BitDo Micro Remapper](docs/screenshot.png)
 
-- Micro の形を画面に表示し、ボタンをクリックするだけで割り当てられます
-- 割り当て方は 2 通り：**実際にキーを押して登録**（`Ctrl+C` のような組み合わせも可）、または**一覧から選択**
-- コントローラーを押すと、画面上の同じボタンが光ります（接続や割り当てのチェックに使えます）
-- キーボード / マウス（クリック・ホイール・カーソル移動）/ 文字列入力 / 無効 を割り当て可能
-- プロファイル（JSON）の保存・切り替え・インポート・エクスポート
-- このアプリのウィンドウが前面になくても動きます
+A desktop app that turns the **8BitDo Micro** into a programmable macro pad.
+It shows the controller's layout on screen, and you can map each button to a key,
+a key combo, a mouse action, or a piece of text. It runs on **macOS and Windows**
+and works over **Bluetooth or USB**.
 
-## 必要なもの
+## Features
 
-- Python 3.9 以上（tkinter 付き。python.org のインストーラ版なら同梱されています）
-- 8BitDo Micro（USB-C ケーブルで接続）
+- Shows the Micro's layout. Each button has a label with its current mapping
+  and a line linking the label to the button.
+- Assign a key either way:
+  - **Press the key**: combos like `Ctrl+C` work too, as does a modifier on its own.
+  - **Pick from a list**: modifier toggles plus a searchable key list that
+    opens on the key currently set.
+- Action types: keyboard key or combo, mouse (click, wheel, cursor movement), typed text, or off.
+- Buttons light up when you press them. Holding a button repeats the key.
+- Profiles: create, duplicate, import and export them as JSON. Changes are saved automatically.
+- Keeps working while other apps are in front.
+- On macOS, keys are sent like a real keyboard, so apps that use global hotkeys
+  (Carbon `RegisterEventHotKey`) also see them, including F-keys.
 
-## インストールと起動
+## Download
+
+Get the zip for your OS from [Releases](../../releases):
+
+| OS | File |
+|---|---|
+| macOS (Apple Silicon) | `8BitDo-Micro-Remapper-macOS-arm64.zip` |
+| Windows (x64) | `8BitDo-Micro-Remapper-Windows-x64.zip` |
+
+- **macOS**: the app isn't notarized, so right-click it and choose **Open** the first time.
+- **Windows**: unzip the file and run `8BitDo Micro Remapper.exe`. SmartScreen may warn
+  because the app is unsigned. Choose **More info → Run anyway**.
+
+## Controller setup
+
+1. Set the mode switch on the back of the Micro to **D** (gamepad mode).
+   In **K** (keyboard) mode the Micro types keys by itself, so they can't be remapped.
+   The app detects K mode and tells you.
+2. Connect it over **Bluetooth** (pair it in the OS Bluetooth settings) or with a **USB** cable.
+
+## Usage
+
+1. Click a button, or its label, on the controller picture.
+2. In the right-hand panel, choose an action:
+   - **Key**: click **Press a key to assign** and then press the key or combo.
+     Or choose modifiers and a key from the list.
+   - **Mouse**: choose a click, a wheel direction or a cursor movement.
+   - **Text**: enter the text the button should type.
+   - **Off**: the button does nothing.
+3. That's it. Changes take effect immediately and are saved.
+
+The **Remap** switch in the toolbar pauses all mappings.
+
+### Wrong button lights up?
+
+Click **Wrong button lights up? Fix…** at the bottom of the panel. The app then asks you
+to press each button in turn, and re-learns which physical button is which.
+Your key assignments are kept.
+
+## macOS notes
+
+- **Accessibility permission is required** to send key presses. Open System Settings → Privacy &
+  Security → **Accessibility** and enable the app. If you run from source, enable your terminal
+  instead. Then restart the app.
+- **Stop the Home button from opening the Games app**: open System Settings → **Game Controllers**
+  → Home Button and turn off **Enable Home Button Actions**. You can also click the Home button's
+  label in the app and choose *Open Game Controller settings…*.
+  - The Home menu also has an *Exclusive mode*, which blocks Home inside the app. Avoid it:
+    in that mode the Micro stops sending D-pad input.
+- The two small centre buttons can't be remapped. The star button is handled inside the
+  controller, and Home doubles as the power button.
+
+## Windows notes
+
+No extra setup is needed. To send keys to an app that runs as administrator,
+run this app as administrator too.
+
+## Run from source
+
+Requires Python 3.9+ with tkinter.
 
 ```bash
-cd 8bitdo-controller
+git clone https://github.com/jojonki/8BitDo-Micro-Remapper.git
+cd 8BitDo-Micro-Remapper
 python3 -m venv .venv
-# macOS
-source .venv/bin/activate
-# Windows (PowerShell)
-# .venv\Scripts\Activate.ps1
+source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python -m remapper
 ```
 
-## コントローラーの準備
+## Settings and profiles
 
-Micro 背面のモードスイッチを **ゲームパッドモード（D または S）** にしてから USB で接続します。
-**K（キーボードモード）では使えません。** K モードの Micro は自分でキーを送るため、
-本物のキーボードと区別できないからです。
-
-## 使い方
-
-1. 画面上のボタン（または下の一覧の行）をクリックして選びます。選んだボタンはオレンジの枠になります。
-2. 右のパネルで割り当てます。
-   - **「⌨ キーを押して設定」** を押してから、割り当てたいキーを押します。修飾キーと組み合わせれば
-     （例：`Ctrl` を押したまま `C`）組み合わせごと登録されます。修飾キーを 1 つだけ押して離すと、その修飾キーだけが登録されます。
-   - **一覧から選択**：修飾キーのチェックボックスとキーのプルダウンで選びます。
-   - **マウス**：左/右/中クリック、ホイール、カーソル移動の中から選びます。
-   - **文字列入力**：ボタンを押すと、決めておいた文字列を入力します。
-3. 変更はすぐに反映され、自動で保存されます。
-
-上の **「リマップ有効」** を外すと、一時的に割り当てを止められます。
-
-### ボタンが光らない・別のボタンが光るとき
-
-接続モードや OS によって、コントローラーから届くボタンの番号が違うことがあります。
-**「Fix all」** を押し、画面の指示どおりにボタンを順番に押してください（1 回で済みます）。
-1 つだけ直したいときは、そのボタンを選んで **「Fix this button」** を使います。
-
-## OS ごとの注意
-
-### macOS
-
-キー入力を送るために、許可が必要です：
-**システム設定 → プライバシーとセキュリティ → アクセシビリティ** で、アプリを起動したもの
-（ターミナル、iTerm、VS Code など）をオンにしてください。オンにしたら、アプリを起動し直します。
-これを許可しないと、ボタンは光ってもキーは送られません。
-
-#### Home ボタンで「ゲーム」アプリが開くのを止める
-
-macOS の設定で止めます：**システム設定 → ゲームコントローラ → Home Button → 「Enable Home Button Actions」をオフ**。
-アプリ画面の Home ボタン（⚙ 付きラベル）をクリックして「Open Game Controller settings…」からも開けます。
-
-アプリの **Exclusive mode** でも Home を止められますが、その間は Micro が十字キーのデータを送らないため
-**十字キーが使えません**。macOS の設定を使ってください。
-
-真ん中の小さい 2 つのボタンは割り当てできません。★ はコントローラーの中で処理され PC に届かず、
-Home は電源ボタンを兼ねているためです。
-
-### Windows
-
-追加の設定はいりません。ただし、管理者権限で動いているアプリにキーを送るときは、
-このアプリも管理者として起動してください。
-
-## 設定ファイルの場所
-
-| OS | 場所 |
+| OS | Location |
 |---|---|
-| Windows | `%APPDATA%\8BitDoMicroRemapper\` |
 | macOS | `~/Library/Application Support/8BitDoMicroRemapper/` |
+| Windows | `%APPDATA%\8BitDoMicroRemapper\` |
 
-`profiles/*.json` にプロファイル、`settings.json` に学習したボタン対応などの設定が保存されます。
-プロファイルの形式：
+`profiles/*.json` holds the profiles. `settings.json` holds the app settings and the learned button bindings.
 
 ```json
 {
   "name": "game",
   "device": "8BitDo Micro",
   "mappings": {
-    "a":    {"type": "key", "keys": ["ctrl", "c"]},
-    "b":    {"type": "mouse", "button": "right"},
-    "home": {"type": "text", "text": "hello"},
-    "l2":   {"type": "none"}
+    "a":  {"type": "key", "keys": ["ctrl", "c"]},
+    "b":  {"type": "mouse", "button": "right"},
+    "x":  {"type": "text", "text": "hello"},
+    "l2": {"type": "none"}
   }
 }
 ```
 
-ボタン ID: `up down left right a b x y l r l2 r2 minus plus star home`
+Button IDs: `up down left right a b x y l r l2 r2 minus plus`
 
-## 仕組み
+## How it works
 
 ```
-8BitDo Micro ──USB──▶ 入力プロセス (pygame-ce / SDL2)
-                         │ 押した/離した
-                         ▼
-                      GUI (tkinter) ── プロファイル ──▶ pynput ──▶ OS へキー/マウス入力
+8BitDo Micro ──BT/USB──▶ input process (pygame-ce / SDL2)
+                              │ press / release
+                              ▼
+                         GUI (tkinter) ── profile ──▶ key / mouse output ──▶ OS
+                                                      (Quartz on macOS, pynput elsewhere)
 ```
 
-macOS では Tk と SDL が同じイベントループを取り合うため、コントローラーの読み取りは別プロセスで行います。
+On macOS, Tk and SDL both want to own the native event loop. The controller is
+therefore read in a separate process.
 
-## テスト
+Set `MICRO_REMAPPER_LOG=/path/to/file.log` to log every controller event (useful for debugging).
+
+## Tests
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-## 配布用アプリのビルド
+## Building the apps
 
 ```bash
 pip install pyinstaller
-pyinstaller --noconfirm packaging/remapper.spec   # → dist/ に .app（Mac）/ .exe（Windows）
+pyinstaller --noconfirm packaging/remapper.spec   # → dist/ (.app on macOS, .exe on Windows)
 ```
 
-`v1.0.0` のようなタグを push すると、GitHub Actions（`.github/workflows/release.yml`）が
-Mac 版と Windows 版をビルドして GitHub Release に載せます。
+Pushing a tag such as `v1.0.1` runs `.github/workflows/release.yml`, which builds the
+macOS and Windows apps and publishes them as a GitHub Release.

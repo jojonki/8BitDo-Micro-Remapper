@@ -513,7 +513,7 @@ class RemapperApp:
 
         # --- key form ---------------------------------------------------
         kf = tk.Frame(self.forms, bg=C_PANEL)
-        self.capture_btn = FlatButton(kf, "⌨  Press a key to assign", self.toggle_capture,
+        self.capture_btn = FlatButton(kf, "Press a key to assign", self.toggle_capture,
                                       kind="primary", font=self.f_small, pady=5)
         self.capture_btn.pack(fill="x")
         self._section(kf, "OR PICK", pady=(8, 3))
@@ -913,7 +913,7 @@ class RemapperApp:
     def stop_capture(self):
         self.capturing = False
         self.capture_mods = []
-        self.capture_btn.configure(text="⌨  Press a key to assign")
+        self.capture_btn.configure(text="Press a key to assign")
         self.capture_btn.set_kind("primary")
         self.hint_var.set(HINT_DEFAULT)
         self.hint_lbl.configure(fg=C_MUTED)
@@ -1163,7 +1163,7 @@ class RemapperApp:
             self.pressed.clear()
             self.device_name = None
             self.refresh_visuals()
-            self.set_device("Disconnected — connect the 8BitDo Micro via USB", C_RED)
+            self.set_device("Disconnected — reconnect the 8BitDo Micro (USB or Bluetooth)", C_RED)
             self.log(f"Disconnected: {msg[1]}")
         elif kind == "kmode":
             if not self.device_name:

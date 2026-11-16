@@ -73,7 +73,7 @@ class _Reader:
         for i in range(pygame.joystick.get_count()):
             self.open_device(i)
         if not self.devices:
-            self.send("status", "No controller — connect the 8BitDo Micro via USB")
+            self.send("status", "No controller — connect the 8BitDo Micro (USB or Bluetooth)")
             self.check_keyboard_mode()
 
     def open_device(self, index):

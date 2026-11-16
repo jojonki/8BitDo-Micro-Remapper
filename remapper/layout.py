@@ -83,7 +83,7 @@ BUTTONS = [
     {"id": "b", "label": "B", "name": "B", "shape": "circle",
      "box": _circle(FACE_C[0], FACE_C[1] + FACE_OFF, FACE_R), "chip": ("right", 6)},
     # The two small centre buttons are handled by the controller / OS
-    # (star: never reported over USB, home: power + OS shortcut), so they are
+    # (star: never reported to the computer, home: power + OS shortcut), so they are
     # shown but cannot be assigned.
     {"id": "star", "label": "", "name": "Centre left (disabled)", "shape": "circle",
      "box": _circle(440, 300, 12), "chip": ("left", 7), "disabled": True,
