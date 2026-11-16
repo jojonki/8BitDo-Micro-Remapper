@@ -120,9 +120,12 @@ macOS では Tk と SDL が同じイベントループを取り合うため、�
 python -m unittest discover -s tests -v
 ```
 
-## 単体アプリにまとめる（任意）
+## 配布用アプリのビルド
 
 ```bash
 pip install pyinstaller
-pyinstaller --windowed --name "8BitDo Micro Remapper" run.py
+pyinstaller --noconfirm packaging/remapper.spec   # → dist/ に .app（Mac）/ .exe（Windows）
 ```
+
+`v1.0.0` のようなタグを push すると、GitHub Actions（`.github/workflows/release.yml`）が
+Mac 版と Windows 版をビルドして GitHub Release に載せます。
