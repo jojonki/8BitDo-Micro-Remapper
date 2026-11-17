@@ -18,7 +18,11 @@ and works over **Bluetooth or USB**.
 - Action types: keyboard key or combo, mouse (click, wheel, cursor movement), typed text, or off.
 - Buttons light up when you press them. Holding a button repeats the key.
 - Profiles: create, duplicate, import and export them as JSON. Changes are saved automatically.
-- Keeps working while other apps are in front.
+- Keeps working while other apps are in front. Closing the window leaves the app running
+  in the menu bar (macOS) or the notification area (Windows).
+- Keeps the Micro from switching itself off after 15 idle minutes: choose 30 min up to
+  8 hours, or never.
+- Checks for new versions and updates itself in one click.
 - On macOS, keys are sent like a real keyboard, so apps that use global hotkeys
   (Carbon `RegisterEventHotKey`) also see them, including F-keys.
 
