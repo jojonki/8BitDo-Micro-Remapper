@@ -55,6 +55,26 @@ class GuiTest(unittest.TestCase):
     def tearDown(self):
         self.app.on_close()
 
+    def test_close_button_keeps_running_with_tray(self):
+        class FakeTray:
+            stopped = False
+
+            def stop(self):
+                self.stopped = True
+        fake = FakeTray()
+        self.app.tray = fake
+        self.app.settings["close_to_tray"] = True
+        self.app.settings["tray_hint_shown"] = True
+        self.app.on_window_close()
+        self.root.update()
+        self.assertEqual(self.root.state(), "withdrawn")
+        self.assertFalse(self.app._quitting)
+        self.app.show_window()
+        self.root.update()
+        self.assertNotEqual(self.root.state(), "withdrawn")
+        self.app.on_close()
+        self.assertTrue(fake.stopped)
+
     def test_canvas_has_all_buttons(self):
         from remapper.layout import BUTTON_IDS
         self.assertEqual(set(self.app.items), set(BUTTON_IDS))

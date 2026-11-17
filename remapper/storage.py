@@ -68,7 +68,8 @@ def load_settings():
     s.setdefault("repeat", True)
     s.setdefault("enabled", True)
     s.setdefault("force_raw", False)
-    s.setdefault("check_updates", True)     # look for a new release at launch
+    s.setdefault("check_updates", True)
+    s.setdefault("close_to_tray", True)     # window close keeps the app running     # look for a new release at launch
     # macOS: seize the pad so the Home button can't launch the Games app
     s.setdefault("exclusive", False)  # use macOS Settings > Game Controllers > Home Button instead
     # idle minutes before the pad powers itself off; None = never (see keepalive.py)

@@ -8,7 +8,7 @@ import time
 import tkinter as tk
 from tkinter import filedialog, font as tkfont, messagebox, simpledialog, ttk
 
-from . import APP_NAME, __version__, input_worker, keepalive, storage, updater
+from . import APP_NAME, __version__, input_worker, keepalive, storage, tray, updater
 from .keys import (ACTION_TYPES, MODIFIER_LABELS, MODIFIERS, MOUSE_ACTIONS,
                    catalog_display_values, catalog_value_to_key, describe_action,
                    key_to_catalog_value, normalize_combo, tk_event_to_key,
@@ -341,7 +341,18 @@ class RemapperApp:
         self._build_ui()
         self._start_worker()
         self.select_button("a")
-        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.root.protocol("WM_DELETE_WINDOW", self.on_window_close)
+        self.tray = None
+        self._quitting = False
+        if sys.platform == "darwin":
+            # Dock icon click shows the window; Cmd+Q / Dock "Quit" really quits
+            try:
+                root.tk.createcommand("::tk::mac::ReopenApplication", self.show_window)
+                root.tk.createcommand("::tk::mac::Quit", self.on_close)
+            except tk.TclError:
+                pass
+        if self.settings.get("close_to_tray", True):
+            self._start_tray()
         self.root.after(5, self.poll)
         self.root.after(keepalive.PING_INTERVAL_MS, self._keepalive_tick)
         updater.cleanup_old()
@@ -421,6 +432,13 @@ class RemapperApp:
         self.profile_menu.add_command(label="Export…", command=self.export_profile)
         self.profile_menu.add_separator()
         self.profile_menu.add_command(label="Delete", command=self.delete_profile)
+        self.profile_menu.add_separator()
+        self.close_to_tray_var = tk.BooleanVar(value=self.settings.get("close_to_tray", True))
+        self.profile_menu.add_checkbutton(
+            label="Keep running when the window is closed" +
+                  (" (menu bar icon)" if sys.platform == "darwin" else " (tray icon)"),
+            variable=self.close_to_tray_var, command=self.on_toggle_close_to_tray)
+        self.profile_menu.add_command(label="Quit", command=self.on_close)
         self.profile_menu.add_separator()
         self.profile_menu.add_command(label="Check for updates…",
                                       command=lambda: self.check_for_updates(manual=True))
@@ -1433,8 +1451,6 @@ class RemapperApp:
             text = f"Version {info['version']} is available (you have {__version__})."
             if updater.can_self_update(info):
                 self.update_btn.configure(text="Update now")
-                if sys.platform == "darwin":
-                    text += "  After updating, you may need to re-enable the app under Accessibility."
             else:
                 self.update_btn.configure(text="Download…")
         self.update_var.set(text)
@@ -1506,7 +1522,71 @@ class RemapperApp:
         if self.banner.winfo_manager():
             self.banner.pack_forget()
 
+    # ------------------------------------------------------- window / tray
+    def _start_tray(self):
+        if self.tray is None:
+            t = tray.Tray(APP_NAME, self.show_window, self.on_close, self._post)
+            if t.start():
+                self.tray = t
+
+    def on_toggle_close_to_tray(self):
+        self.settings["close_to_tray"] = self.close_to_tray_var.get()
+        storage.save_settings(self.settings)
+        if self.settings["close_to_tray"]:
+            self._start_tray()
+        elif self.tray is not None:
+            self.tray.stop()
+            self.tray = None
+
+    def on_window_close(self):
+        """Window close button: keep running in the menu bar / tray if possible."""
+        if not (self.settings.get("close_to_tray", True) and self.tray is not None):
+            self.on_close()
+            return
+        if self.capturing:
+            self.stop_capture()
+        if self.dirty:
+            self.save_current(quiet=True)
+        self.root.withdraw()
+        tray.Tray.set_dock_icon(False)
+        if not self.settings.get("tray_hint_shown"):
+            self.settings["tray_hint_shown"] = True
+            storage.save_settings(self.settings)
+            where = "menu bar" if sys.platform == "darwin" else "notification area"
+            self._notify(f"{APP_NAME} is still running and your buttons stay remapped. "
+                         f"Use its {where} icon to show the window or quit.")
+
+    def show_window(self):
+        tray.Tray.set_dock_icon(True)
+        self.root.deiconify()
+        self.root.lift()
+        try:
+            self.root.focus_force()
+        except tk.TclError:
+            pass
+
+    def _notify(self, text):
+        if sys.platform == "darwin":
+            import subprocess
+            script = f'display notification "{text}" with title "{APP_NAME}"'
+            try:
+                subprocess.Popen(["osascript", "-e", script],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except OSError:
+                pass
+        elif self.tray is not None and self.tray._icon is not None:
+            try:
+                self.tray._icon.notify(text, APP_NAME)
+            except Exception:
+                pass
+
     def on_close(self):
+        if self._quitting:
+            return
+        self._quitting = True
+        if self.tray is not None:
+            self.tray.stop()
+            self.tray = None
         try:
             self.executor.release_all()
             if self.dirty:

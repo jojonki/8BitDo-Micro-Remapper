@@ -31,7 +31,7 @@ Get the zip for your OS from [Releases](../../releases):
 | macOS (Apple Silicon) | `8BitDo-Micro-Remapper-macOS-arm64.zip` |
 | Windows (x64) | `8BitDo-Micro-Remapper-Windows-x64.zip` |
 
-- **macOS**: the app isn't notarized, so right-click it and choose **Open** the first time.
+- **macOS**: the app is signed and notarized, so it opens like any other app.
 - **Windows**: unzip the file and run `8BitDo Micro Remapper.exe`. SmartScreen may warn
   because the app is unsigned. Choose **More info → Run anyway**.
 
@@ -68,8 +68,13 @@ The default, *15 min*, sends nothing.
 At launch the app checks GitHub for a newer release and shows a bar when one is available.
 **Update now** downloads it, replaces the app and restarts it. You can also use
 **⋯ → Check for updates…**, and turn the launch check off in the same menu.
-On macOS you may need to re-enable the app under **Accessibility** after an update,
-because the app isn't signed with a developer certificate.
+
+### Closing the window
+
+Closing the window keeps the app running, so your buttons stay remapped. It lives in the
+menu bar (macOS) or the notification area (Windows): use that icon to show the window
+again or to quit. To quit when the window closes instead, turn off
+**⋯ → Keep running when the window is closed**.
 
 ### Wrong button lights up?
 
@@ -160,5 +165,12 @@ pip install pyinstaller
 pyinstaller --noconfirm packaging/remapper.spec   # → dist/ (.app on macOS, .exe on Windows)
 ```
 
-Pushing a tag such as `v1.0.1` runs `.github/workflows/release.yml`, which builds the
-macOS and Windows apps and publishes them as a GitHub Release.
+Pushing a tag such as `v1.2.0` runs `.github/workflows/release.yml`, which builds the apps
+and creates a draft GitHub Release with the Windows build. The macOS app is signed and
+notarized on a Mac with a Developer ID certificate, then attached, and the draft is published:
+
+```bash
+xcrun notarytool store-credentials notary --apple-id <Apple ID> --team-id <TEAM ID>   # once
+packaging/macos_release.sh --upload
+gh release edit v1.2.0 --draft=false
+```

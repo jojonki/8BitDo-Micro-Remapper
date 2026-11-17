@@ -1,7 +1,9 @@
 name: Release
 
-# Push a tag like v1.0.0 to build the macOS and Windows apps and publish a
-# GitHub Release with both. Can also be run by hand (builds only).
+# Push a tag like v1.0.0 to build the apps and create a *draft* GitHub Release
+# with the Windows build. The macOS build here is only a check: the released
+# macOS app is signed and notarized locally with packaging/macos_release.sh
+# --upload, then the draft is published (gh release edit vX.Y.Z --draft=false).
 on:
   push:
     tags: ["v*"]
@@ -65,7 +67,8 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: assets/*.zip
+          draft: true
+          files: assets/*Windows*.zip
           body: |
             ## Downloads
             - **macOS (Apple Silicon)**: `8BitDo-Micro-Remapper-macOS-arm64.zip`
@@ -73,9 +76,8 @@ jobs:
 
             ## First launch
             - Set the Micro's mode switch to **D** and connect it over Bluetooth or USB.
-            - **macOS**: the app is not notarized. Right-click the app → **Open** the first time.
-              Then allow it in System Settings → Privacy & Security → **Accessibility**
-              (needed to send key presses), and restart the app.
+            - **macOS**: the app is signed and notarized by Apple. Allow it in System Settings →
+              Privacy & Security → **Accessibility** (needed to send key presses), and restart the app.
               To stop the Home button opening the Games app: System Settings → Game Controllers →
               Home Button → turn off **Enable Home Button Actions**.
             - **Windows**: unzip and run `8BitDo Micro Remapper.exe`

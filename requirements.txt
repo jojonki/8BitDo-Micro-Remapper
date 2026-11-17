@@ -2,3 +2,6 @@ pygame-ce>=2.5
 pynput>=1.7.7
 # K-mode detection and the auto power-off keep-alive
 hidapi>=0.14
+# Windows tray icon (macOS uses the menu bar through PyObjC)
+pystray>=0.19; sys_platform == "win32"
+Pillow>=10; sys_platform == "win32"
