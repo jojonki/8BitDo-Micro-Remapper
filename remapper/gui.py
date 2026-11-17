@@ -3,11 +3,12 @@
 import multiprocessing as mp
 import queue as queue_mod
 import sys
+import threading
 import time
 import tkinter as tk
 from tkinter import filedialog, font as tkfont, messagebox, simpledialog, ttk
 
-from . import APP_NAME, __version__, input_worker, storage
+from . import APP_NAME, __version__, input_worker, keepalive, storage, updater
 from .keys import (ACTION_TYPES, MODIFIER_LABELS, MODIFIERS, MOUSE_ACTIONS,
                    catalog_display_values, catalog_value_to_key, describe_action,
                    key_to_catalog_value, normalize_combo, tk_event_to_key,
@@ -324,6 +325,10 @@ class RemapperApp:
         self.unknown_sources = set()
         self._suppress_form = False
         self._learn_pending = None
+        self.last_activity = time.monotonic()   # last button press (for auto power-off)
+        self._ui_q = queue_mod.Queue()          # callables posted from worker threads
+        self._update_info = None
+        self._updating = False
 
         self.ff = pick_font_family(root)
         self.f_body = (self.ff, 12)
@@ -338,6 +343,10 @@ class RemapperApp:
         self.select_button("a")
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         self.root.after(5, self.poll)
+        self.root.after(keepalive.PING_INTERVAL_MS, self._keepalive_tick)
+        updater.cleanup_old()
+        if self.settings.get("check_updates", True):
+            self.root.after(3000, lambda: self.check_for_updates(manual=False))
 
         if mac_accessibility_trusted() is False:
             self.show_banner(
@@ -412,6 +421,13 @@ class RemapperApp:
         self.profile_menu.add_command(label="Export…", command=self.export_profile)
         self.profile_menu.add_separator()
         self.profile_menu.add_command(label="Delete", command=self.delete_profile)
+        self.profile_menu.add_separator()
+        self.profile_menu.add_command(label="Check for updates…",
+                                      command=lambda: self.check_for_updates(manual=True))
+        self.check_updates_var = tk.BooleanVar(value=self.settings.get("check_updates", True))
+        self.profile_menu.add_checkbutton(label="Check for updates at launch",
+                                          variable=self.check_updates_var,
+                                          command=self.on_toggle_check_updates)
 
         self.enabled_var = tk.BooleanVar(value=self.settings["enabled"])
         self.repeat_var = tk.BooleanVar(value=self.settings["repeat"])
@@ -419,6 +435,22 @@ class RemapperApp:
                font=self.f_body).pack(side="right")
         Toggle(bar, "Key repeat", self.repeat_var, self.on_toggle_repeat,
                font=self.f_body).pack(side="right", padx=(0, 22))
+        # auto power-off: the pad sleeps after 15 idle minutes by itself;
+        # the app can keep it awake longer (see keepalive.py)
+        self.power_var = tk.StringVar(value=self._power_key(self.settings["power_off"]))
+        self.power_btn = FlatButton(bar, "", self._open_power_menu, font=self.f_body, padx=12)
+        self.power_btn.pack(side="right", padx=(0, 22))
+        Tooltip(self.power_btn, "How long the controller may sit idle before it powers off.\n"
+                                "The Micro turns itself off after 15 min; longer times keep it\n"
+                                "awake from this app (uses more battery).")
+        self.power_menu = tk.Menu(root, tearoff=0)
+        self.power_menu.add_command(label="Power off after idle", state="disabled")
+        self.power_menu.add_separator()
+        for minutes, label in keepalive.POWER_OFF_CHOICES:
+            self.power_menu.add_radiobutton(label=label, value=self._power_key(minutes),
+                                            variable=self.power_var,
+                                            command=self.on_power_off_change)
+        self._update_power_btn()
         self.exclusive_var = tk.BooleanVar(value=self.settings["exclusive"])
         # Home-button menu (opened by clicking the Home button / its label).
         # macOS itself can stop Home from opening the Games app (System
@@ -453,6 +485,19 @@ class RemapperApp:
         self.banner = tk.Label(root, text="", bg="#3a2f14", fg="#ffd88a", anchor="w",
                                justify="left", padx=14, pady=10, wraplength=1250,
                                font=self.f_small)
+
+        # ---- update bar (hidden unless an update is available) ---------
+        self.update_bar = tk.Frame(root, bg="#16294a", padx=14, pady=8)
+        self.update_var = tk.StringVar(value="")
+        tk.Label(self.update_bar, textvariable=self.update_var, bg="#16294a", fg="#cfe0ff",
+                 font=self.f_small, anchor="w", justify="left").pack(side="left")
+        FlatButton(self.update_bar, "Later", self.hide_update_bar, kind="ghost",
+                   font=self.f_small, pady=4).pack(side="right")
+        FlatButton(self.update_bar, "What's new", self.open_release_page,
+                   font=self.f_small, pady=4).pack(side="right", padx=(0, 8))
+        self.update_btn = FlatButton(self.update_bar, "Update now", self.install_update,
+                                     kind="primary", font=self.f_small, pady=4)
+        self.update_btn.pack(side="right", padx=(0, 8))
 
         # ---- main area -----------------------------------------------
         main = tk.Frame(root, bg=C_BG)
@@ -711,6 +756,45 @@ class RemapperApp:
             self.home_menu.tk_popup(e.x_root, e.y_root)
         finally:
             self.home_menu.grab_release()
+
+    # ------------------------------------------------------- auto power-off
+    @staticmethod
+    def _power_key(minutes):
+        return "never" if minutes is None else str(minutes)
+
+    def _update_power_btn(self):
+        self.power_btn.configure(
+            text=f"⏻ Power-off: {keepalive.short_label(self.settings['power_off'])} ▾")
+
+    def _open_power_menu(self):
+        b = self.power_btn
+        try:
+            self.power_menu.tk_popup(b.winfo_rootx(), b.winfo_rooty() + b.winfo_height())
+        finally:
+            self.power_menu.grab_release()
+
+    def on_power_off_change(self):
+        v = self.power_var.get()
+        self.settings["power_off"] = None if v == "never" else int(v)
+        storage.save_settings(self.settings)
+        self._update_power_btn()
+        self.last_activity = time.monotonic()
+        self.log("Auto power-off: " + keepalive.short_label(self.settings["power_off"]))
+        if keepalive.should_ping(self.settings["power_off"], 0):
+            self._keepalive_ping()
+
+    def _keepalive_tick(self):
+        try:
+            idle = time.monotonic() - self.last_activity
+            if (self.device_name and not self.settings.get("exclusive")
+                    and keepalive.should_ping(self.settings["power_off"], idle)):
+                self._keepalive_ping()
+        finally:
+            self.root.after(keepalive.PING_INTERVAL_MS, self._keepalive_tick)
+
+    def _keepalive_ping(self):
+        if keepalive.supported():
+            keepalive.ping_async()
 
     def _set_hover(self, bid):
         self.hover = bid
@@ -1066,6 +1150,7 @@ class RemapperApp:
 
     # ------------------------------------------------------- input events
     def on_source_down(self, source):
+        self.last_activity = time.monotonic()
         if self.learn_target is not None:
             # one physical press can emit several inputs at once (e.g. a
             # trigger sends an analog value *and* a button bit): collect them
@@ -1118,6 +1203,11 @@ class RemapperApp:
 
     def poll(self):
         try:
+            while True:
+                self._ui_q.get_nowait()()
+        except queue_mod.Empty:
+            pass
+        try:
             for _ in range(200):
                 msg = self.q.get_nowait()
                 self._handle_msg(msg)
@@ -1153,6 +1243,7 @@ class RemapperApp:
         elif kind == "connected":
             _, name, guid, mode = msg
             self.device_name = name
+            self.last_activity = time.monotonic()
             m = {"controller": "GameController", "exclusive": "Exclusive · Home blocked"}.get(mode, "Raw")
             self.set_device(f"Connected: {name}  ·  {m}", C_GREEN)
             self.hide_banner("kmode")
@@ -1297,6 +1388,103 @@ class RemapperApp:
         self.set_device("Reconnecting…", C_ORANGE)
         self.refresh_visuals()
         self._start_worker()
+
+    # ------------------------------------------------------- updates
+    def _post(self, fn):
+        """Run fn on the Tk thread (safe to call from any thread)."""
+        self._ui_q.put(fn)
+
+    def on_toggle_check_updates(self):
+        self.settings["check_updates"] = self.check_updates_var.get()
+        storage.save_settings(self.settings)
+
+    def check_for_updates(self, manual=True):
+        if manual:
+            self.log("Checking for updates…")
+
+        def work():
+            try:
+                info = updater.fetch_latest()
+                err = None
+            except Exception as e:
+                info, err = None, e
+            self._post(lambda: self._update_checked(info, err, manual))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _update_checked(self, info, err, manual):
+        if err is not None:
+            if manual:
+                self.log("Update check failed")
+                messagebox.showerror(APP_NAME, f"Could not check for updates:\n{err}", parent=self.root)
+            return
+        if not updater.is_newer(info["version"]):
+            if manual:
+                self.log(f"Up to date (v{__version__})")
+                messagebox.showinfo(APP_NAME, f"You have the latest version (v{__version__}).",
+                                    parent=self.root)
+            return
+        self._update_info = info
+        self.log(f"Update available: v{info['version']}")
+        self.show_update_bar()
+
+    def show_update_bar(self, text=None):
+        info = self._update_info
+        if text is None:
+            text = f"Version {info['version']} is available (you have {__version__})."
+            if updater.can_self_update(info):
+                self.update_btn.configure(text="Update now")
+                if sys.platform == "darwin":
+                    text += "  After updating, you may need to re-enable the app under Accessibility."
+            else:
+                self.update_btn.configure(text="Download…")
+        self.update_var.set(text)
+        if not self.update_bar.winfo_manager():
+            self.update_bar.pack(side="top", fill="x", padx=20, pady=(0, 6), before=self.main_frame)
+
+    def hide_update_bar(self):
+        if not self._updating and self.update_bar.winfo_manager():
+            self.update_bar.pack_forget()
+
+    def open_release_page(self):
+        import webbrowser
+        webbrowser.open((self._update_info or {}).get("page") or updater.RELEASES_PAGE)
+
+    def install_update(self):
+        info = self._update_info
+        if not info or self._updating:
+            return
+        if not updater.can_self_update(info):
+            self.open_release_page()
+            return
+        self._updating = True
+        self.show_update_bar(f"Downloading version {info['version']}…")
+
+        def progress(frac):
+            self._post(lambda: self.update_var.set(
+                f"Downloading version {info['version']}… {int(frac * 100)}%"))
+
+        def work():
+            try:
+                new = updater.prepare(info, progress)
+                self._post(lambda: self._finish_update(new))
+            except Exception as e:
+                self._post(lambda: self._update_failed(e))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _finish_update(self, new_path):
+        try:
+            updater.launch_installer(new_path)
+        except Exception as e:
+            self._update_failed(e)
+            return
+        self.update_var.set("Restarting…")
+        self.root.after(200, self.on_close)
+
+    def _update_failed(self, err):
+        self._updating = False
+        self.show_update_bar()
+        messagebox.showerror(APP_NAME, f"The update failed:\n{err}\n\n"
+                             "You can download it from the release page instead.", parent=self.root)
 
     def on_toggle_repeat(self):
         self.settings["repeat"] = self.repeat_var.get()

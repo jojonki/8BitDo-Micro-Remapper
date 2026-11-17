@@ -72,7 +72,7 @@ jobs:
             - **Windows (x64)**: `8BitDo-Micro-Remapper-Windows-x64.zip`
 
             ## First launch
-            - Set the Micro's mode switch to **D** and connect it by USB.
+            - Set the Micro's mode switch to **D** and connect it over Bluetooth or USB.
             - **macOS**: the app is not notarized. Right-click the app → **Open** the first time.
               Then allow it in System Settings → Privacy & Security → **Accessibility**
               (needed to send key presses), and restart the app.

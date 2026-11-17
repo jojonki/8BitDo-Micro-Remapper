@@ -55,6 +55,22 @@ Get the zip for your OS from [Releases](../../releases):
 
 The **Remap** switch in the toolbar pauses all mappings.
 
+### Auto power-off
+
+The Micro switches itself off after 15 minutes without a button press, and its firmware
+can't be changed. **⏻ Power-off** in the toolbar lets it stay on longer: 30 min, 1, 2, 4, 6
+or 8 hours, or **Never**. While the time hasn't run out, the app sends the controller a
+harmless signal every 30 seconds, which resets its idle timer. Longer times use more battery.
+The default, *15 min*, sends nothing.
+
+### Updates
+
+At launch the app checks GitHub for a newer release and shows a bar when one is available.
+**Update now** downloads it, replaces the app and restarts it. You can also use
+**⋯ → Check for updates…**, and turn the launch check off in the same menu.
+On macOS you may need to re-enable the app under **Accessibility** after an update,
+because the app isn't signed with a developer certificate.
+
 ### Wrong button lights up?
 
 Click **Wrong button lights up? Fix…** at the bottom of the panel. The app then asks you

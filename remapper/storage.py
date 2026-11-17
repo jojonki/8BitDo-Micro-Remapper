@@ -5,6 +5,7 @@ import os
 import re
 import sys
 
+from .keepalive import DEFAULT_POWER_OFF, normalize_power_off
 from .keys import validate_action
 from .layout import ASSIGNABLE_IDS as BUTTON_IDS
 
@@ -67,8 +68,11 @@ def load_settings():
     s.setdefault("repeat", True)
     s.setdefault("enabled", True)
     s.setdefault("force_raw", False)
+    s.setdefault("check_updates", True)     # look for a new release at launch
     # macOS: seize the pad so the Home button can't launch the Games app
     s.setdefault("exclusive", False)  # use macOS Settings > Game Controllers > Home Button instead
+    # idle minutes before the pad powers itself off; None = never (see keepalive.py)
+    s["power_off"] = normalize_power_off(s.get("power_off", DEFAULT_POWER_OFF))
     if not isinstance(s["source_map"], dict):
         s["source_map"] = {}
     return s

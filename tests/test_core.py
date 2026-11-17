@@ -5,7 +5,7 @@ import unittest
 
 os.environ["MICRO_REMAPPER_HOME"] = tempfile.mkdtemp(prefix="micro-remap-test-")
 
-from remapper import keys, layout, storage  # noqa: E402
+from remapper import keepalive, keys, layout, storage  # noqa: E402
 
 
 class KeysTest(unittest.TestCase):
@@ -155,3 +155,47 @@ class StorageTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KeepaliveTest(unittest.TestCase):
+    def test_should_ping(self):
+        sp = keepalive.should_ping
+        self.assertFalse(sp(15, 0))                 # controller default: never ping
+        self.assertTrue(sp(None, 10 ** 9))          # never power off
+        self.assertTrue(sp(60, 0))
+        self.assertTrue(sp(60, 45 * 60 - 1))        # 1 h = 45 min of pings + 15 min firmware timer
+        self.assertFalse(sp(60, 45 * 60))
+        self.assertTrue(sp(360, 5 * 3600))          # 6 h
+
+    def test_choices_and_labels(self):
+        self.assertIn(360, [m for m, _ in keepalive.POWER_OFF_CHOICES])
+        self.assertEqual(keepalive.normalize_power_off("bogus"), keepalive.DEFAULT_POWER_OFF)
+        self.assertIsNone(keepalive.normalize_power_off(None))
+        self.assertEqual(keepalive.short_label(360), "6 hours")
+        self.assertEqual(keepalive.short_label(30), "30 min")
+        self.assertEqual(storage.load_settings()["power_off"], keepalive.DEFAULT_POWER_OFF)
+
+
+class UpdaterTest(unittest.TestCase):
+    def test_versions(self):
+        from remapper import updater
+        self.assertEqual(updater.parse_version("v1.2.3"), (1, 2, 3))
+        self.assertEqual(updater.parse_version("1.1.0"), updater.parse_version("v1.1"))
+        self.assertTrue(updater.is_newer("v1.10.0", "1.9.9"))
+        self.assertFalse(updater.is_newer("v1.1.0", "1.1.0"))
+        self.assertFalse(updater.is_newer("garbage", "1.0.0"))
+
+    def test_release_info(self):
+        from remapper import updater
+        data = {"tag_name": "v2.0.0", "html_url": "https://example/r", "body": "notes",
+                "assets": [{"name": updater.ASSETS["darwin"], "size": 5,
+                            "browser_download_url": "https://example/mac.zip"},
+                           {"name": updater.ASSETS["win32"], "size": 6,
+                            "browser_download_url": "https://example/win.zip"}]}
+        mac = updater.release_info(data, "darwin")
+        self.assertEqual((mac["version"], mac["asset_url"], mac["asset_size"]),
+                         ("2.0.0", "https://example/mac.zip", 5))
+        self.assertEqual(updater.release_info(data, "win32")["asset_url"], "https://example/win.zip")
+        self.assertIsNone(updater.release_info(data, "linux")["asset_url"])
+        self.assertIsNone(updater.install_target())     # tests run from source
+        self.assertFalse(updater.can_self_update())

@@ -1,4 +1,4 @@
 pygame-ce>=2.5
 pynput>=1.7.7
-# optional: only used to detect a Micro left in K (keyboard) mode
+# K-mode detection and the auto power-off keep-alive
 hidapi>=0.14

@@ -8,12 +8,13 @@ APP = "8BitDo Micro Remapper"
 ROOT = SPECPATH + "/.."
 
 # pynput picks its backend at runtime, so list it explicitly
-hidden = ["remapper.input_worker", "remapper.hid_exclusive", "remapper.mac_keys"]
+hidden = ["remapper.input_worker", "remapper.hid_exclusive", "remapper.mac_keys",
+          "remapper.keepalive", "remapper.updater"]
 if sys.platform == "darwin":
     hidden += ["pynput.keyboard._darwin", "pynput.mouse._darwin", "pynput._util.darwin",
                "Quartz", "AppKit", "hid"]
 elif sys.platform == "win32":
-    hidden += ["pynput.keyboard._win32", "pynput.mouse._win32", "pynput._util.win32"]
+    hidden += ["pynput.keyboard._win32", "pynput.mouse._win32", "pynput._util.win32", "hid"]
 hidden += collect_submodules("pygame._sdl2")
 
 a = Analysis(
